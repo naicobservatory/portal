@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Quality Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #020617;
+      --surface: #0f172a;
+      --glass-bg: rgba(255,255,255,0.03);
+      --glass-border: rgba(255,255,255,0.08);
+      --card-bg: #0f172a;
+      --body-text: #f8fafc;
+      --muted: #64748b;
+      --sub: #94a3b8;
+      --border-subtle: rgba(255,255,255,0.05);
+      --table-header: rgba(255,255,255,0.1);
+      --metric-bg: rgba(255,255,255,0.02);
+      --sources-bg: rgba(30,41,59,0.3);
+    }
+    body.light {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --glass-bg: rgba(255,255,255,0.85);
+      --glass-border: rgba(0,0,0,0.09);
+      --card-bg: #ffffff;
+      --body-text: #0f172a;
+      --muted: #64748b;
+      --sub: #475569;
+      --border-subtle: rgba(0,0,0,0.06);
+      --table-header: rgba(0,0,0,0.07);
+      --metric-bg: rgba(0,0,0,0.025);
+      --sources-bg: rgba(241,245,249,0.8);
+    }
+    body { box-sizing: border-box; background: var(--bg); color: var(--body-text); }
+    * { font-family: 'Space Grotesk', sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+    }
+    body.light .glass-card {
+      background: var(--glass-bg);
+      border-color: var(--glass-border);
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    /* AQI Colors */
+    .aqi-good { background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); box-shadow: 0 0 40px rgba(46,204,113,.3); }
+    .aqi-moderate { background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); box-shadow: 0 0 40px rgba(243,156,18,.3); }
+    .aqi-unhealthy-sensitive { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); box-shadow: 0 0 40px rgba(231,76,60,.3); }
+    .aqi-unhealthy { background: linear-gradient(135deg, #8b0000 0%, #660000 100%); box-shadow: 0 0 40px rgba(139,0,0,.3); }
+    .aqi-very-unhealthy { background: linear-gradient(135deg, #4b0082 0%, #2f004f 100%); box-shadow: 0 0 40px rgba(75,0,130,.3); }
+    .aqi-hazardous { background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%); box-shadow: 0 0 40px rgba(0,0,0,.5); }
+    .text-aqi-good { color: #2ecc71; }
+    .text-aqi-moderate { color: #f39c12; }
+    .text-aqi-unhealthy-sensitive { color: #e74c3c; }
+    .text-aqi-unhealthy { color: #8b0000; }
+    .text-aqi-very-unhealthy { color: #4b0082; }
+    .text-aqi-hazardous { color: #1a1a1a; }
+    .pulse-ring { animation: pulse-ring 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+    @keyframes pulse-ring { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:.8;transform:scale(1.05)} }
+    .data-refresh { animation: refresh-pulse .5s ease-out; }
+    @keyframes refresh-pulse { 0%{opacity:.5;transform:scale(.98)} 100%{opacity:1;transform:scale(1)} }
+    .live-dot { animation: live-blink 1.5s ease-in-out infinite; }
+    @keyframes live-blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .grid-bg {
+      background-image: linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+      background-size: 50px 50px;
+    }
+    body.light .grid-bg {
+      background-image: linear-gradient(rgba(0,0,0,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,0,0,.03) 1px,transparent 1px);
+    }
+    .recommendation-box { background: rgba(255,255,255,.02); border-left: 3px solid currentColor; }
+    body.light .recommendation-box { background: rgba(0,0,0,.015); }
+    .recommendation-item { display: flex; gap: 12px; padding: 12px 0; }
+    .recommendation-item .icon { flex-shrink: 0; width: 20px; height: 20px; margin-top: 2px; font-size: 18px; line-height: 1; }
+    .tab-button { cursor: pointer; }
+    .tab-button.active { color: white; border-color: #2ecc71; }
+    body.light .tab-button.active { color: #0f172a; }
+    body.light .tab-button:not(.active) { color: #64748b; }
+    .tab-content { animation: fadeIn .3s ease-in; }
+    .tab-content.hidden { display: none; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+    .comparison-box { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08); }
+    body.light .comparison-box { background: #f8fafc; border-color: rgba(0,0,0,.08); }
+    .pm-size-visualization { background: linear-gradient(to right,rgba(255,255,255,.05),rgba(255,255,255,.02)); border-radius:.5rem; padding:2rem 1rem; text-align:center; }
+    body.light .pm-size-visualization { background: linear-gradient(to right,rgba(0,0,0,.03),rgba(0,0,0,.015)); }
+    .particle-dot-large { display:inline-block;width:32px;height:32px;border-radius:50%;margin:0 4px; }
+    .particle-dot-small { display:inline-block;width:12px;height:12px;border-radius:50%;margin:0 4px; }
+    .feature-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem; }
+    .feature-item { background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);border-radius:.75rem;padding:1rem;display:flex;flex-direction:column;gap:.5rem; }
+    body.light .feature-item { background: #f1f5f9; border-color: rgba(0,0,0,.07); }
+    .feature-label { font-size:.875rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em; }
+    body.light .feature-label { color: #64748b; }
+    .feature-value { font-size:1.25rem;font-weight:600;color:#f1f5f9; }
+    body.light .feature-value { color: #0f172a; }
+
+    /* Light mode text overrides */
+    body.light .text-white { color: #0f172a !important; }
+    body.light .text-slate-300 { color: #334155 !important; }
+    body.light .text-slate-400 { color: #475569 !important; }
+    body.light .text-slate-500 { color: #64748b !important; }
+    body.light .text-slate-600 { color: #475569 !important; }
+    body.light .bg-slate-950 { background: var(--bg) !important; }
+    body.light .bg-slate-700\/20, body.light .bg-slate-800\/30 { background: rgba(226,232,240,.6) !important; }
+    body.light .border-white\/10 { border-color: rgba(0,0,0,.09) !important; }
+    body.light .border-white\/5 { border-color: rgba(0,0,0,.06) !important; }
+    body.light .bg-slate-800 { background: #f1f5f9 !important; }
+    body.light .border-slate-700 { border-color: rgba(0,0,0,.1) !important; }
+    body.light .text-slate-200 { color: #1e293b !important; }
+    body.light .bg-green-500\/5 { background: rgba(34,197,94,.06) !important; }
+    body.light .bg-yellow-500\/5 { background: rgba(234,179,8,.06) !important; }
+    body.light .bg-red-500\/5 { background: rgba(239,68,68,.06) !important; }
+    body.light .bg-red-700\/5 { background: rgba(185,28,28,.06) !important; }
+    body.light .bg-purple-700\/5 { background: rgba(126,34,206,.06) !important; }
+    body.light .bg-gray-700\/5 { background: rgba(55,65,81,.06) !important; }
+    /* AQI scale pills */
+    body.light .bg-green-500\/10 { background: rgba(34,197,94,.1) !important; }
+    body.light .bg-yellow-500\/10 { background: rgba(234,179,8,.1) !important; }
+    body.light .bg-red-500\/10 { background: rgba(239,68,68,.1) !important; }
+    body.light .bg-red-700\/10 { background: rgba(185,28,28,.1) !important; }
+    body.light .bg-purple-700\/10 { background: rgba(126,34,206,.1) !important; }
+    body.light .bg-gray-700\/10 { background: rgba(55,65,81,.1) !important; }
+    /* PM card inner progress bar track */
+    body.light .bg-slate-800 { background: #e2e8f0 !important; }
+    /* Header bg */
+    body.light .grid-bg > div.absolute { background: transparent !important; }
+    /* PM detail boxes */
+    body.light .bg-amber-500\/10 { background: rgba(245,158,11,.08) !important; }
+    body.light .bg-rose-500\/10  { background: rgba(244,63,94,.08) !important; }
+    /* Ambient orbs — hide in light */
+    body.light .bg-emerald-500\/10,
+    body.light .bg-blue-500\/10 { opacity: .15 !important; }
+    /* Footer */
+    body.light .text-slate-600 { color: #94a3b8 !important; }
+    /* Tooltip */
+    body.light .bg-slate-800.border-slate-700 {
+      background: #ffffff !important;
+      border-color: rgba(0,0,0,.1) !important;
+      color: #0f172a !important;
+    }
+
+    /* ── Theme toggle button ── */
+    #theme-btn {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.04);
+      transition: all .2s ease; flex-shrink: 0;
+    }
+    #theme-btn:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); }
+    body.light #theme-btn { border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.03); }
+    body.light #theme-btn:hover { background: rgba(0,0,0,.07); }
+    #theme-btn svg { transition: transform .35s ease; }
+  </style>
+</head>
+<body class="h-full bg-slate-950 text-white overflow-auto">
+  <div class="min-h-full w-full grid-bg relative">
+    <!-- Ambient background effects -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+    </div>
+    <div class="relative z-10 p-6 md:p-8 max-w-6xl mx-auto">
+
+      <!-- Header -->
+      <header class="mb-8">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <div class="flex items-center gap-3 mb-2">
+              <div id="status-indicator" class="w-3 h-3 rounded-full bg-emerald-400 live-dot"></div>
+              <span id="status-text" class="text-xs uppercase tracking-widest text-slate-400">Live Data</span>
+            </div>
+            <h1 id="location-title" class="text-2xl md:text-3xl font-bold text-white">NAIC Air Quality Station</h1>
+            <p id="station-info" class="text-slate-400 text-sm mt-1">Real-time Environmental Monitoring System</p>
+          </div>
+          <div class="flex flex-col items-end gap-3">
+            <div class="flex items-center gap-2">
+
+              <!-- ── THEME TOGGLE BUTTON ── -->
+              <button id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark theme">
+                <!-- Sun (shown in dark mode) -->
+                <svg id="theme-sun" class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+                </svg>
+                <!-- Moon (shown in light mode, hidden by default) -->
+                <svg id="theme-moon" class="w-4 h-4 text-slate-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                </svg>
+              </button>
+
+              <div class="relative group">
+                <label class="flex items-center gap-3 cursor-pointer group">
+                  <span id="event-mode-label" class="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">Rapid Update</span>
+                  <div id="event-mode-toggle" class="relative w-12 h-6 bg-slate-700 rounded-full transition-all duration-300 group-hover:bg-slate-600" style="background:rgb(55,65,81);">
+                    <div id="toggle-dot" class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-lg"></div>
+                  </div>
+                </label>
+                <!-- Tooltip -->
+                <div class="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg">
+                  <div class="text-xs text-slate-200 space-y-1">
+                    <div class="font-semibold text-emerald-400 mb-2">Rapid Update Mode</div>
+                    <div class="text-slate-300"><strong>OFF:</strong> Shows 24-hour average air quality data (official standard)</div>
+                    <div class="text-slate-300"><strong>ON:</strong> Shows real-time instantaneous air quality readings for immediate conditions</div>
+                  </div>
+                  <div class="absolute top-0 right-6 w-2 h-2 bg-slate-800 border-l border-t border-slate-700 transform -rotate-45 -mt-1"></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Last Updated</div>
+              <div id="update-time" class="mono text-lg text-slate-300">--:--:--</div>
+              <div id="update-date" class="text-xs text-slate-500">Loading...</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main AQI Display -->
+      <div id="main-aqi-card" class="glass-card rounded-2xl p-6 md:p-8 mb-6 aqi-good relative overflow-hidden">
+        <div class="absolute inset-0 pulse-ring bg-white/5 rounded-2xl"></div>
+        <div class="relative z-10">
+          <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+            <div>
+              <div id="aqi-label" class="text-white/70 text-sm uppercase tracking-wider mb-1">Overall Air Quality Index (24-hr Average)</div>
+              <div id="aqi-status" class="text-2xl md:text-3xl font-bold text-white">Good</div>
+            </div>
+            <div class="text-right">
+              <div id="main-aqi-value" class="mono text-6xl md:text-7xl font-bold text-white">--</div>
+              <div class="text-white/70 text-sm">US AQI</div>
+            </div>
+          </div>
+          <p id="health-message" class="text-white/80 text-sm md:text-base">Air quality is satisfactory, and air pollution poses little or no risk.</p>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="mb-6 border-b border-white/10">
+        <div class="flex gap-0 overflow-x-auto">
+          <button id="tab-recommendations" class="tab-button px-4 py-3 text-white font-medium border-b-2 border-emerald-400 transition-all text-sm md:text-base whitespace-nowrap">Recommendations</button>
+          <button id="tab-pm-comparison" class="tab-button px-4 py-3 text-slate-400 font-medium border-b-2 border-transparent hover:text-white transition-all text-sm md:text-base whitespace-nowrap">PM2.5 vs PM10</button>
+          <button id="tab-education" class="tab-button px-4 py-3 text-slate-400 font-medium border-b-2 border-transparent hover:text-white transition-all text-sm md:text-base whitespace-nowrap">Learn About AQI</button>
+        </div>
+      </div>
+
+      <!-- Health Recommendations Section -->
+      <div id="recommendations-section" class="tab-content glass-card rounded-2xl p-6 md:p-8 mb-6">
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Health &amp; Activity Recommendations
+        </h2>
+        <div id="recommendations-content" class="space-y-4"></div>
+      </div>
+
+      <!-- PM2.5 vs PM10 Comparison Section -->
+      <div id="pm-comparison-section" class="tab-content hidden">
+        <div class="glass-card rounded-2xl p-8 mb-6">
+          <div class="text-center mb-8">
+            <h2 class="text-3xl md:text-4xl font-bold mb-2 text-white">Understanding the Difference</h2>
+            <p class="text-slate-400">What makes PM2.5 and PM10 different?</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- PM10 -->
+            <div class="comparison-box rounded-xl p-6">
+              <div class="flex items-center gap-3 mb-4">
+                <svg class="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><circle cx="12" cy="12" r="8" stroke-width="2" stroke-dasharray="4 4"/></svg>
+                <h3 class="text-2xl font-bold text-amber-400">PM10</h3>
+              </div>
+              <p class="text-slate-400 text-sm mb-4">Coarse Particulate Matter</p>
+              <div class="pm-size-visualization mb-6">
+                <div class="text-slate-500 text-xs uppercase tracking-widest mb-4">Size Visualization</div>
+                <div class="flex justify-center items-center gap-2">
+                  <span class="particle-dot-large bg-gradient-to-br from-amber-400 to-amber-600"></span>
+                  <span class="text-slate-400 text-sm">10 µm (micrometer)</span>
+                </div>
+              </div>
+              <div class="feature-grid">
+                <div class="feature-item"><span class="feature-label">Diameter Range</span><span class="feature-value">2.5-10 µm</span></div>
+                <div class="feature-item"><span class="feature-label">Visibility</span><span class="feature-value">Visible Dust</span></div>
+              </div>
+            </div>
+            <!-- PM2.5 -->
+            <div class="comparison-box rounded-xl p-6">
+              <div class="flex items-center gap-3 mb-4">
+                <svg class="w-8 h-8 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="2"/><path stroke-width="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83m-8.48 8.48l-2.83 2.83m14.14 0l-2.83-2.83M6.34 6.34L3.51 3.51"/></svg>
+                <h3 class="text-2xl font-bold text-rose-400">PM2.5</h3>
+              </div>
+              <p class="text-slate-400 text-sm mb-4">Fine Particulate Matter</p>
+              <div class="pm-size-visualization mb-6">
+                <div class="text-slate-500 text-xs uppercase tracking-widest mb-4">Size Visualization</div>
+                <div class="flex justify-center items-center gap-2">
+                  <span class="particle-dot-small bg-gradient-to-br from-rose-400 to-rose-600"></span>
+                  <span class="text-slate-400 text-sm">2.5 µm (micrometer)</span>
+                </div>
+              </div>
+              <div class="feature-grid">
+                <div class="feature-item"><span class="feature-label">Diameter Range</span><span class="feature-value">≤2.5 µm</span></div>
+                <div class="feature-item"><span class="feature-label">Visibility</span><span class="feature-value">Microscopic</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Sources -->
+          <div class="bg-slate-800/30 rounded-lg p-6 mb-8 border border-white/5">
+            <h3 class="text-xl font-bold text-white mb-6">Common Sources</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div class="flex items-center gap-2 mb-4">
+                  <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><circle cx="12" cy="12" r="8" stroke-width="2" stroke-dasharray="4 4"/></svg>
+                  <h4 class="font-semibold text-amber-400">PM10 Sources</h4>
+                </div>
+                <ul class="text-slate-300 text-sm space-y-2">
+                  <li class="flex gap-2"><span class="text-amber-400">→</span> Dust and soil particles</li>
+                  <li class="flex gap-2"><span class="text-amber-400">→</span> Construction and demolition</li>
+                  <li class="flex gap-2"><span class="text-amber-400">→</span> Road dust and abrasion</li>
+                  <li class="flex gap-2"><span class="text-amber-400">→</span> Pollen and sea salt</li>
+                  <li class="flex gap-2"><span class="text-amber-400">→</span> Volcanic ash</li>
+                </ul>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-4">
+                  <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="2"/><path stroke-width="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83m-8.48 8.48l-2.83 2.83m14.14 0l-2.83-2.83M6.34 6.34L3.51 3.51"/></svg>
+                  <h4 class="font-semibold text-rose-400">PM2.5 Sources</h4>
+                </div>
+                <ul class="text-slate-300 text-sm space-y-2">
+                  <li class="flex gap-2"><span class="text-rose-400">→</span> Vehicle exhaust and emissions</li>
+                  <li class="flex gap-2"><span class="text-rose-400">→</span> Industrial pollution</li>
+                  <li class="flex gap-2"><span class="text-rose-400">→</span> Power plant emissions</li>
+                  <li class="flex gap-2"><span class="text-rose-400">→</span> Burning of fuel</li>
+                  <li class="flex gap-2"><span class="text-rose-400">→</span> Chemical reactions in air</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <!-- Health Impact -->
+          <div class="bg-slate-800/30 rounded-lg p-6 border border-white/5">
+            <h3 class="text-xl font-bold text-white mb-6">How They Affect Your Health</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div class="flex items-center gap-2 mb-4">
+                  <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <h4 class="font-semibold text-amber-400">PM10 Health Effects</h4>
+                </div>
+                <div class="space-y-3">
+                  <div class="bg-amber-500/10 rounded p-3 border-l-2 border-amber-400"><div class="font-semibold text-amber-300 text-sm mb-1">Deposition</div><p class="text-slate-300 text-xs">Deposits in upper airway and throat</p></div>
+                  <div class="bg-amber-500/10 rounded p-3 border-l-2 border-amber-400"><div class="font-semibold text-amber-300 text-sm mb-1">Symptoms</div><p class="text-slate-300 text-xs">Coughing, wheezing, throat irritation</p></div>
+                  <div class="bg-amber-500/10 rounded p-3 border-l-2 border-amber-400"><div class="font-semibold text-amber-300 text-sm mb-1">Risk Level</div><p class="text-slate-300 text-xs">Moderate - primarily respiratory</p></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-4">
+                  <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <h4 class="font-semibold text-rose-400">PM2.5 Health Effects</h4>
+                </div>
+                <div class="space-y-3">
+                  <div class="bg-rose-500/10 rounded p-3 border-l-2 border-rose-400"><div class="font-semibold text-rose-300 text-sm mb-1">Deposition</div><p class="text-slate-300 text-xs">Penetrates deep into lungs and bloodstream</p></div>
+                  <div class="bg-rose-500/10 rounded p-3 border-l-2 border-rose-400"><div class="font-semibold text-rose-300 text-sm mb-1">Symptoms</div><p class="text-slate-300 text-xs">Asthma, bronchitis, cardiovascular issues</p></div>
+                  <div class="bg-rose-500/10 rounded p-3 border-l-2 border-rose-400"><div class="font-semibold text-rose-300 text-sm mb-1">Risk Level</div><p class="text-slate-300 text-xs">High - systemic and respiratory effects</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Educational Section -->
+      <div id="education-section" class="tab-content hidden glass-card rounded-2xl p-6 md:p-8 mb-6">
+        <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          Understanding AQI Levels
+        </h2>
+        <div class="mb-6">
+          <h3 class="font-semibold text-white mb-3">AQI Breakpoints by Pollutant (DENR EMB)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-white/10">
+                  <th class="text-left py-2 px-3 text-slate-400 font-medium">AQI Range</th>
+                  <th class="text-left py-2 px-3 text-slate-400 font-medium">Category</th>
+                  <th class="text-left py-2 px-3 text-slate-400 font-medium">PM2.5 (µg/m³) 24-hr</th>
+                  <th class="text-left py-2 px-3 text-slate-400 font-medium">PM10 (µg/m³) 24-hr</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-300">
+                <tr class="border-b border-white/5 bg-green-500/5"><td class="py-2 px-3">0-50</td><td class="py-2 px-3 font-medium text-green-400">Good</td><td class="py-2 px-3">0-12</td><td class="py-2 px-3">0-54</td></tr>
+                <tr class="border-b border-white/5 bg-yellow-500/5"><td class="py-2 px-3">51-100</td><td class="py-2 px-3 font-medium text-yellow-400">Moderate</td><td class="py-2 px-3">12.1-35.4</td><td class="py-2 px-3">55-154</td></tr>
+                <tr class="border-b border-white/5 bg-red-500/5"><td class="py-2 px-3">101-150</td><td class="py-2 px-3 font-medium text-red-400">Unhealthy (SG)</td><td class="py-2 px-3">35.5-55.4</td><td class="py-2 px-3">155-254</td></tr>
+                <tr class="border-b border-white/5 bg-red-700/5"><td class="py-2 px-3">151-200</td><td class="py-2 px-3 font-medium text-red-300">Unhealthy</td><td class="py-2 px-3">55.5-150.4</td><td class="py-2 px-3">255-354</td></tr>
+                <tr class="border-b border-white/5 bg-purple-700/5"><td class="py-2 px-3">201-300</td><td class="py-2 px-3 font-medium text-purple-300">Very Unhealthy</td><td class="py-2 px-3">150.5-250.4</td><td class="py-2 px-3">355-424</td></tr>
+                <tr class="bg-gray-700/5"><td class="py-2 px-3">301+</td><td class="py-2 px-3 font-medium text-gray-300">Hazardous</td><td class="py-2 px-3">250.5+</td><td class="py-2 px-3">425+</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-slate-700/20 rounded-lg p-4 border-l-2 border-emerald-400 mb-4">
+          <p class="text-slate-300 text-sm"><span class="font-semibold text-emerald-400">DENR EMB 24-Hour Averaging:</span> All PM2.5 and PM10 concentrations are averaged over the past 24 hours before calculating the AQI. This provides a stable, standardized measure that aligns with official DENR EMB air quality reporting standards.</p>
+        </div>
+        <div class="bg-slate-700/20 rounded-lg p-4 border-l-2 border-blue-400">
+          <p class="text-slate-300 text-sm"><span class="font-semibold text-blue-400">How Overall AQI is Calculated:</span> The dashboard displays the higher of the two 24-hour averaged pollutant AQI values. This means if PM2.5 AQI is 75 (Moderate) and PM10 AQI is 120 (Unhealthy for Sensitive Groups), the overall AQI shown will be 120. This conservative approach ensures you're always alerted to the most pressing air quality concern.</p>
+        </div>
+      </div>
+
+      <!-- PM Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <!-- PM2.5 -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="2"/><path stroke-width="2" d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83m-8.48 8.48l-2.83 2.83m14.14 0l-2.83-2.83M6.34 6.34L3.51 3.51"/></svg>
+                <span class="text-slate-400 text-sm font-medium">PM2.5</span>
+              </div>
+              <div class="text-xs text-slate-500">Fine Particulate Matter (24-hr avg)</div>
+            </div>
+            <div id="pm25-badge" class="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400">Good</div>
+          </div>
+          <div class="mb-4">
+            <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">AQI Level</div>
+            <div class="flex items-baseline gap-2"><span id="pm25-aqi" class="mono text-4xl font-bold text-white">--</span><span class="text-slate-500 text-sm">US AQI</span></div>
+          </div>
+          <div class="mt-4">
+            <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="pm25-bar" class="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <!-- PM10 -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" stroke-width="2"/><circle cx="12" cy="12" r="8" stroke-width="2" stroke-dasharray="4 4"/></svg>
+                <span class="text-slate-400 text-sm font-medium">PM10</span>
+              </div>
+              <div class="text-xs text-slate-500">Coarse Particulate Matter (24-hr avg)</div>
+            </div>
+            <div id="pm10-badge" class="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400">Good</div>
+          </div>
+          <div class="mb-4">
+            <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">AQI Level</div>
+            <div class="flex items-baseline gap-2"><span id="pm10-aqi" class="mono text-4xl font-bold text-white">--</span><span class="text-slate-500 text-sm">US AQI</span></div>
+          </div>
+          <div class="mt-4">
+            <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="pm10-bar" class="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Metrics -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div class="glass-card rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2"><svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9V3m0 0L9 6m3-3l3 3m-3 12a4 4 0 100-8 4 4 0 000 8z"/></svg><span class="text-slate-500 text-xs uppercase tracking-wider">Temp</span></div>
+          <div class="flex items-baseline gap-1"><span id="temp-value" class="mono text-2xl font-semibold text-white">--</span><span class="text-slate-500">°C</span></div>
+        </div>
+        <div class="glass-card rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2"><svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707"/></svg><span class="text-slate-500 text-xs uppercase tracking-wider">Humidity</span></div>
+          <div class="flex items-baseline gap-1"><span id="humidity-value" class="mono text-2xl font-semibold text-white">--</span><span class="text-slate-500">%</span></div>
+        </div>
+        <div class="glass-card rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2"><svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span class="text-slate-500 text-xs uppercase tracking-wider">Pressure</span></div>
+          <div class="flex items-baseline gap-1"><span id="pressure-value" class="mono text-2xl font-semibold text-white">--</span><span class="text-slate-500 text-xs">hPa</span></div>
+        </div>
+        <div class="glass-card rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-2"><svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg><span class="text-slate-500 text-xs uppercase tracking-wider">Wind</span></div>
+          <div class="flex items-baseline gap-1 mb-2"><span id="wind-value" class="mono text-2xl font-semibold text-white">--</span><span class="text-slate-500 text-xs">km/h</span></div>
+          <div class="pt-2 border-t border-white/5">
+            <div class="text-slate-500 text-xs uppercase tracking-wider mb-1">Direction</div>
+            <div class="flex items-center gap-2">
+              <svg id="wind-arrow" class="w-4 h-4 text-cyan-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform:rotate(0deg)"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4"/></svg>
+              <span id="wind-direction" class="text-sm text-slate-300">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AQI Legend -->
+      <div class="glass-card rounded-xl p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">AQI Scale Reference (DENR EMB)</div>
+        <div class="flex flex-wrap gap-2">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10"><div class="w-2 h-2 rounded-full bg-green-500"></div><span class="text-xs text-slate-300">0-50 Good</span></div>
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-500/10"><div class="w-2 h-2 rounded-full bg-yellow-500"></div><span class="text-xs text-slate-300">51-100 Moderate</span></div>
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10"><div class="w-2 h-2 rounded-full bg-red-500"></div><span class="text-xs text-slate-300">101-150 Unhealthy (SG)</span></div>
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-700/10"><div class="w-2 h-2 rounded-full bg-red-700"></div><span class="text-xs text-slate-300">151-200 Unhealthy</span></div>
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-700/10"><div class="w-2 h-2 rounded-full bg-purple-700"></div><span class="text-xs text-slate-300">201-300 Very Unhealthy</span></div>
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-700/10"><div class="w-2 h-2 rounded-full bg-gray-700"></div><span class="text-xs text-slate-300">301+ Hazardous</span></div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="mt-6 text-center">
+        <p class="text-slate-600 text-xs">24-hour rolling averages per DENR EMB standards • Data updates every 30 seconds • Air quality monitoring powered by environmental sensors</p>
+      </footer>
+
+    </div>
+  </div>
+
+  <script>
+    /* ─── Theme Toggle ─── */
+    let aqmsDark = true;
+
+    function toggleTheme() {
+      aqmsDark = !aqmsDark;
+      document.body.classList.toggle('light', !aqmsDark);
+      const sun  = document.getElementById('theme-sun');
+      const moon = document.getElementById('theme-moon');
+      if (aqmsDark) {
+        sun.classList.remove('hidden');
+        moon.classList.add('hidden');
+        document.getElementById('theme-btn').title = 'Switch to light theme';
+      } else {
+        sun.classList.add('hidden');
+        moon.classList.remove('hidden');
+        document.getElementById('theme-btn').title = 'Switch to dark theme';
+      }
+      try { localStorage.setItem('aqmsTheme', aqmsDark ? 'dark' : 'light'); } catch(e) {}
+    }
+
+    // Load saved preference
+    (function() {
+      try {
+        if (localStorage.getItem('aqmsTheme') === 'light') toggleTheme();
+      } catch(e) {}
+    })();
+
+    /* ─── App Config ─── */
+    const defaultConfig = {
+      location_name: 'NAIC Air Quality Station',
+      station_info: 'Real-time Environmental Monitoring System',
+      accent_color: '#2ecc71',
+      font_family: 'Space Grotesk'
+    };
+    let config = { ...defaultConfig };
+
+    const aqiRecommendations = {
+      good: { status:'Good (0-50)', color:'#2ecc71', recommendations:[{icon:'✅',text:'Air pollution poses little or no risk'},{icon:'🏃',text:'Outdoor activities are safe for everyone'},{icon:'💪',text:'Great day for outdoor exercise and sports'},{icon:'🌬',text:'Keep windows open for natural ventilation'}] },
+      fair: { status:'Fair (51-100)', color:'#f39c12', recommendations:[{icon:'⚠',text:'Moderate health risk for unusually sensitive people'},{icon:'🏃',text:'Most people can enjoy outdoor activities'},{icon:'👥',text:'Unusually sensitive people may want to limit prolonged outdoor exertion'},{icon:'💧',text:'Drink plenty of water and stay hydrated'}] },
+      unhealthySensitive: { status:'Unhealthy for Sensitive Groups (101-150)', color:'#e74c3c', recommendations:[{icon:'🫁',text:'People with respiratory diseases such as asthma should limit outdoor exertions'},{icon:'⏱',text:'Reduce intensity and duration of outdoor activities'},{icon:'🎭',text:'Consider wearing N95 masks during outdoor activities'},{icon:'🪟',text:'Keep indoor spaces well-ventilated or use air purifiers'},{icon:'💊',text:'Have medications readily available for respiratory conditions'}] },
+      veryUnhealthy: { status:'Very Unhealthy (151-200)', color:'#8b0000', recommendations:[{icon:'❤',text:'People with heart or respiratory diseases should stay indoors and rest'},{icon:'🏠',text:'Limit outdoor activities and exertion'},{icon:'🪟',text:'Keep windows and doors closed'},{icon:'❄',text:'Use air conditioning or air purifiers with HEPA filters'},{icon:'🎭',text:'Wear N95/P100 masks if outdoor exposure is necessary'}] },
+      acutelyUnhealthy: { status:'Acutely Unhealthy (201-300)', color:'#4b0082', recommendations:[{icon:'🚨',text:'General public should limit outdoor exertions'},{icon:'❤',text:'People with heart or respiratory diseases should stay indoors and rest'},{icon:'🏠',text:'Everyone should avoid strenuous outdoor activities'},{icon:'🪟',text:'Keep all windows and doors closed'},{icon:'❄',text:'Use air conditioning or air purifiers continuously'},{icon:'🎭',text:'Wear P100 masks if outdoor exposure is absolutely necessary'}] },
+      hazardous: { status:'Hazardous (301+)', color:'#1a1a1a', recommendations:[{icon:'🚨',text:'Everyone should remain indoors and keep windows and doors closed'},{icon:'🏠',text:'Stay indoors and minimize any outdoor exposure'},{icon:'🪟',text:'Seal all windows and doors; use air filters continuously'},{icon:'📞',text:'Contact healthcare providers for guidance'},{icon:'🏥',text:'Monitor health status closely; seek medical help if experiencing symptoms'},{icon:'⛔',text:'All schools, offices, and non-essential services likely suspended'}] }
+    };
+
+    function getAQICategory(aqi) {
+      if (aqi<=50)  return {status:'Good',class:'aqi-good',badgeClass:'bg-green-500/20 text-green-400',barClass:'from-green-400 to-green-500',key:'good',message:'Air pollution poses little or no risk.'};
+      if (aqi<=100) return {status:'Fair',class:'aqi-moderate',badgeClass:'bg-yellow-500/20 text-yellow-400',barClass:'from-yellow-400 to-yellow-500',key:'fair',message:'Moderate health risk for a small number of unusually sensitive people.'};
+      if (aqi<=150) return {status:'Unhealthy for Sensitive Groups',class:'aqi-unhealthy-sensitive',badgeClass:'bg-red-500/20 text-red-400',barClass:'from-red-400 to-red-500',key:'unhealthySensitive',message:'People with respiratory diseases such as asthma should limit outdoor exertions.'};
+      if (aqi<=200) return {status:'Very Unhealthy',class:'aqi-unhealthy',badgeClass:'bg-red-700/20 text-red-300',barClass:'from-red-700 to-red-800',key:'veryUnhealthy',message:'People with heart or respiratory diseases should stay indoors and rest.'};
+      if (aqi<=300) return {status:'Acutely Unhealthy',class:'aqi-very-unhealthy',badgeClass:'bg-purple-700/20 text-purple-300',barClass:'from-purple-700 to-purple-800',key:'acutelyUnhealthy',message:'General public should limit outdoor exertions.'};
+      return {status:'Hazardous',class:'aqi-hazardous',badgeClass:'bg-gray-700/20 text-gray-300',barClass:'from-gray-800 to-gray-900',key:'hazardous',message:'Everyone should remain indoors and keep windows and doors closed.'};
+    }
+
+    function renderRecommendations(categoryKey) {
+      const rec = aqiRecommendations[categoryKey];
+      const container = document.getElementById('recommendations-content');
+      if (!rec) return;
+      container.innerHTML = `<div class="recommendation-box rounded-lg p-4" style="border-left-color:${rec.color}"><h3 class="font-semibold mb-3" style="color:${rec.color}">${rec.status}</h3><div class="space-y-2">${rec.recommendations.map(r=>`<div class="recommendation-item"><span class="icon">${r.icon}</span><span class="text-slate-300 text-sm">${r.text}</span></div>`).join('')}</div></div>`;
+    }
+
+    async function fetchSensorData() {
+      try {
+        const ts = Date.now();
+        const response = await fetch(`https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLhAH0dXaoHYko7OJ1-Ji-j2PA9D-9A1X1K0hNc2wyUev92IcnJwuD2eBKugqi1PiMbZwnVc7MZfvuwtKCrMmPa67hNrUm-0q8S1CGpXXjcV8z86-56SKBKCb7jthHm1Oc9IigHmZzitbmVyap_D1bKBNk9nxUTKbzwKUJBzgBOzX925-u9CI476YP-DYrbTBaT3DXLlEf2AGHws59dvSAwdaSSfpTpNxfw9tQEW7XudtSCgTs26IVOsep3RrHLO5H0MBpmZFZJ0hhQ_hBoTVdmsjMuQWPDZAsE98Lf_&lib=MTbhs9Zv5KTG9ImKpSDDDPCIObk80Qa1W&t=${ts}`);
+        const data = await response.json();
+        const rawData = data.raw_data?.data || {};
+        let pm25AQI = null, pm10AQI = null;
+        if (eventModeActive) {
+          pm25AQI = parseFloat(rawData.pm25_aqi_combo?.real_time_aqi?.value) || null;
+          pm10AQI = parseFloat(rawData.pm10_aqi_combo?.real_time_aqi?.value) || null;
+        } else {
+          pm25AQI = parseFloat(rawData.pm25_aqi_combo?.["24_hours_aqi"]?.value) || null;
+          pm10AQI = parseFloat(rawData.pm10_aqi_combo?.["24_hours_aqi"]?.value) || null;
+        }
+        const tempF = parseFloat(rawData.outdoor?.temperature?.value) || null;
+        const tempC = tempF !== null ? (tempF-32)*5/9 : null;
+        const humidity = parseInt(rawData.outdoor?.humidity?.value) || null;
+        const pressureInHg = parseFloat(rawData.pressure?.absolute?.value) || null;
+        const pressureHPa = pressureInHg !== null ? pressureInHg * 33.8639 : null;
+        const windMph = parseFloat(rawData.wind?.wind_speed?.value) || null;
+        const windKmh = windMph !== null ? windMph * 1.60934 : null;
+        const windDirection = parseFloat(rawData.wind?.wind_direction?.value) || null;
+        return { pm25AQI, pm10AQI, temperature: tempC ? Math.round(tempC*10)/10 : null, humidity, pressure: pressureHPa ? Math.round(pressureHPa) : null, wind: windKmh ? Math.round(windKmh*10)/10 : null, windDirection, timestamp: new Date() };
+      } catch(e) {
+        console.error('Fetch error:', e);
+        return { pm25AQI:null, pm10AQI:null, temperature:null, humidity:null, pressure:null, wind:null, windDirection:null, timestamp:new Date() };
+      }
+    }
+
+    function getWindDirection(degrees) {
+      if (degrees===null||degrees===undefined) return '--';
+      const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+      return dirs[Math.round(((degrees%360)+360)%360/22.5)%16];
+    }
+
+    function updateDisplay(data) {
+      const timeStr = data.timestamp.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+      const dateStr = data.timestamp.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+      document.getElementById('update-time').textContent = timeStr;
+      document.getElementById('update-date').textContent = dateStr;
+      const validAQIs = [data.pm25AQI, data.pm10AQI].filter(v => v!==null && v!==undefined);
+      const overallAQI = validAQIs.length > 0 ? Math.max(...validAQIs) : null;
+      if (overallAQI !== null) {
+        const cat = getAQICategory(overallAQI);
+        const mainCard = document.getElementById('main-aqi-card');
+        mainCard.className = `glass-card rounded-2xl p-6 md:p-8 mb-6 ${cat.class} relative overflow-hidden data-refresh`;
+        document.getElementById('main-aqi-value').textContent = overallAQI;
+        document.getElementById('aqi-status').textContent = cat.status;
+        document.getElementById('health-message').textContent = cat.message;
+        renderRecommendations(cat.key);
+      } else {
+        document.getElementById('main-aqi-value').textContent = '--';
+        document.getElementById('aqi-status').textContent = 'Loading...';
+        document.getElementById('health-message').textContent = 'Connecting to sensors...';
+        renderRecommendations('good');
+      }
+      if (data.pm25AQI !== null) {
+        const c = getAQICategory(data.pm25AQI);
+        document.getElementById('pm25-aqi').textContent = Math.round(data.pm25AQI);
+        document.getElementById('pm25-badge').className = `px-2 py-1 rounded-full text-xs font-medium ${c.badgeClass}`;
+        document.getElementById('pm25-badge').textContent = c.status;
+        document.getElementById('pm25-bar').className = `h-full bg-gradient-to-r ${c.barClass} rounded-full transition-all duration-500`;
+        document.getElementById('pm25-bar').style.width = `${Math.min(data.pm25AQI/3,100)}%`;
+      } else { document.getElementById('pm25-aqi').textContent='--'; document.getElementById('pm25-badge').textContent='Unavailable'; document.getElementById('pm25-bar').style.width='0%'; }
+      if (data.pm10AQI !== null) {
+        const c = getAQICategory(data.pm10AQI);
+        document.getElementById('pm10-aqi').textContent = Math.round(data.pm10AQI);
+        document.getElementById('pm10-badge').className = `px-2 py-1 rounded-full text-xs font-medium ${c.badgeClass}`;
+        document.getElementById('pm10-badge').textContent = c.status;
+        document.getElementById('pm10-bar').className = `h-full bg-gradient-to-r ${c.barClass} rounded-full transition-all duration-500`;
+        document.getElementById('pm10-bar').style.width = `${Math.min(data.pm10AQI/3,100)}%`;
+      } else { document.getElementById('pm10-aqi').textContent='--'; document.getElementById('pm10-badge').textContent='Unavailable'; document.getElementById('pm10-bar').style.width='0%'; }
+      document.getElementById('temp-value').textContent = data.temperature!==null ? data.temperature.toFixed(1) : '--';
+      document.getElementById('humidity-value').textContent = data.humidity!==null ? data.humidity : '--';
+      document.getElementById('pressure-value').textContent = data.pressure!==null ? data.pressure : '--';
+      document.getElementById('wind-value').textContent = data.wind!==null ? data.wind.toFixed(1) : '--';
+      const dirText = getWindDirection(data.windDirection);
+      document.getElementById('wind-direction').textContent = dirText+(data.windDirection!==null?` (${Math.round(data.windDirection)}°)`:'');
+      if (data.windDirection!==null) document.getElementById('wind-arrow').style.transform = `rotate(${((data.windDirection%360)+360)%360}deg)`;
+    }
+
+    function applyConfig(cfg) {
+      document.getElementById('location-title').textContent = cfg.location_name || defaultConfig.location_name;
+      document.getElementById('station-info').textContent = cfg.station_info || defaultConfig.station_info;
+    }
+
+    const DATA_FETCH_INTERVAL = 30*1000;
+    let lastSuccessfulDataTime = null, lastDataTimestamp = null;
+    const OUTAGE_TIMEOUT = 5*60*1000;
+    let eventModeActive = false, dataRefreshInterval = null;
+
+    function updateStatusIndicator(isOnline) {
+      const si = document.getElementById('status-indicator');
+      const st = document.getElementById('status-text');
+      if (isOnline) { si.className='w-3 h-3 rounded-full bg-emerald-400 live-dot'; st.textContent='Live Data'; st.className='text-xs uppercase tracking-widest text-slate-400'; }
+      else { si.className='w-3 h-3 rounded-full bg-red-600'; si.style.animation='live-blink .5s ease-in-out infinite'; st.textContent='Data outage: No latest data being reported.'; st.className='text-xs uppercase tracking-widest text-red-400'; }
+    }
+
+    function checkDataOutage() {
+      if (lastSuccessfulDataTime===null) return;
+      updateStatusIndicator(Date.now()-lastSuccessfulDataTime <= OUTAGE_TIMEOUT);
+    }
+
+    async function init() {
+      applyConfig(config);
+      const initialData = await fetchSensorData();
+      if (initialData.pm25AQI!==null||initialData.pm10AQI!==null) { lastSuccessfulDataTime=Date.now(); lastDataTimestamp=initialData.timestamp.getTime(); updateStatusIndicator(true); }
+      updateDisplay(initialData);
+      if (dataRefreshInterval) clearInterval(dataRefreshInterval);
+      dataRefreshInterval = setInterval(async () => {
+        const freshData = await fetchSensorData();
+        if (freshData.pm25AQI!==null||freshData.pm10AQI!==null) { const nt=freshData.timestamp.getTime(); if(lastDataTimestamp===null||nt>lastDataTimestamp){lastSuccessfulDataTime=Date.now();lastDataTimestamp=nt;updateStatusIndicator(true);updateDisplay(freshData);} }
+        checkDataOutage();
+      }, DATA_FETCH_INTERVAL);
+      setInterval(checkDataOutage, 10*1000);
+    }
+
+    async function toggleEventMode() {
+      eventModeActive = !eventModeActive;
+      const tb = document.getElementById('event-mode-toggle'), td = document.getElementById('toggle-dot'), al = document.getElementById('aqi-label');
+      if (eventModeActive) { tb.style.background='rgb(16,185,129)'; td.style.left='calc(100% - 1.25rem)'; al.textContent='Realtime Air Quality Index'; }
+      else { tb.style.background='rgb(55,65,81)'; td.style.left='0.25rem'; al.textContent='Overall Air Quality Index (24-hr Average)'; }
+      const freshData = await fetchSensorData();
+      if (freshData.pm25AQI!==null||freshData.pm10AQI!==null) { lastSuccessfulDataTime=Date.now(); lastDataTimestamp=freshData.timestamp.getTime(); updateStatusIndicator(true); }
+      updateDisplay(freshData);
+    }
+
+    document.getElementById('event-mode-toggle').addEventListener('click', toggleEventMode);
+
+    /* Tab switching */
+    const tabRec=document.getElementById('tab-recommendations'), tabPM=document.getElementById('tab-pm-comparison'), tabEdu=document.getElementById('tab-education');
+    const secRec=document.getElementById('recommendations-section'), secPM=document.getElementById('pm-comparison-section'), secEdu=document.getElementById('education-section');
+    function setActiveTab(aTab,t1,t2,aSec,s1,s2){aTab.classList.add('active');t1.classList.remove('active');t2.classList.remove('active');aSec.classList.remove('hidden');s1.classList.add('hidden');s2.classList.add('hidden');}
+    tabRec.addEventListener('click',()=>setActiveTab(tabRec,tabPM,tabEdu,secRec,secPM,secEdu));
+    tabPM.addEventListener('click',()=>setActiveTab(tabPM,tabRec,tabEdu,secPM,secRec,secEdu));
+    tabEdu.addEventListener('click',()=>setActiveTab(tabEdu,tabRec,tabPM,secEdu,secRec,secPM));
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange: async (cfg) => { config={...defaultConfig,...cfg}; applyConfig(config); },
+        mapToCapabilities: (cfg) => ({ recolorables:[{get:()=>cfg.accent_color||defaultConfig.accent_color,set:(v)=>window.elementSdk.setConfig({accent_color:v})}], borderables:[], fontEditable:{get:()=>cfg.font_family||defaultConfig.font_family,set:(v)=>window.elementSdk.setConfig({font_family:v})}, fontSizeable:undefined }),
+        mapToEditPanelValues: (cfg) => new Map([['location_name',cfg.location_name||defaultConfig.location_name],['station_info',cfg.station_info||defaultConfig.station_info]])
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
